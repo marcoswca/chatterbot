@@ -1,5 +1,11 @@
 from chatterbot import ChatBot
 from chatterbot.trainers import ChatterBotCorpusTrainer
+from chatterbot.trainers import ListTrainer
+from pymongo import MongoClient
+
+client = MongoClient('localhost', 27017)
+database = client['chatterbot-database']
+products_colletcion = database.products
 
 # Uncomment the following line to enable verbose logging
 # import logging
@@ -17,13 +23,9 @@ bot = ChatBot(
         },
         {
             'import_path': 'chatterbot.logic.MathematicalEvaluation'
-        },
-        {
-            'import_path': 'chatterbot.logic.LowConfidenceAdapter',
-            'threshold': 0.65,
-            'default_response': 'I am sorry, but I do not understand.'
         }
-    ]
+    ],
+
 )
 
 bot.set_trainer(ChatterBotCorpusTrainer)
@@ -31,6 +33,10 @@ bot.set_trainer(ChatterBotCorpusTrainer)
 bot.train("chatterbot.corpus.english")
 
 CONVERSATION_ID = bot.storage.create_conversation()
+
+
+unnecessary_words = ['to', 'i', "i'm", 'you', 'me', 'yours', 'they', 'be', 'can', 'should',
+                     'are', 'is', 'in', 'the', 'of']
 
 
 def get_feedback():
@@ -46,8 +52,13 @@ def get_feedback():
         print('Please type either "Yes" or "No"')
         return get_feedback()
 
+def getProductsOnSale():
+    product = products_colletcion.find({"onSale": True},{"product":1,"_id":0}).limit(5).sort('qty',-1)
+    for item in getProductsOnSale():
+        print(item['product'])
 
-print("Type something to begin...")
+print("Hi")
+print("How can i help you ?")
 
 # The following loop will execute each time the user enters input
 while True:
@@ -55,23 +66,36 @@ while True:
         input_statement = bot.input.process_input_statement()
         statement, response = bot.generate_response(input_statement, CONVERSATION_ID)
 
-        # if response.confidence > 0.5:
-        #     bot.output.process_response(response)
-        # else:
-        #     print(response.confidence)
-        #     print("Sorry, I'm too young to understand this ... could you tell me what I can do in this situation?")
-        #     response1 = bot.input.process_input_statement()
-        #     bot.learn_response(response1, input_statement)
-        #     bot.storage.add_to_conversation(CONVERSATION_ID, statement, response1)
-        #     print("Tks")
-        print('\n Is "{}" a coherent response to "{}"? \n'.format(response, input_statement))
-        if get_feedback():
-            print("please input the correct one")
-            response1 = bot.input.process_input_statement()
-            bot.learn_response(response1, input_statement)
-            bot.storage.add_to_conversation(CONVERSATION_ID, statement, response1)
-            print("Responses added to bot!")
+        if response.confidence > 0.6:
+            if(response == "There are some products on sale"):
+                bot.output.process_response(response)
+                getProductsOnSale()
+            else:
+                bot.output.process_response(response)
+        else:
 
-    # Press ctrl-c or ctrl-d on the keyboard to exit
+            print("Sorry, I'm too young to understand this ...")
+            var = int(input("Press 1 to products on sale\nPress 2 to products in stock\nPress 3 to product location\n"))
+
+            if(var==1):
+                bot.set_trainer(ListTrainer)
+
+                bot.train([
+                    str(statement),
+                    'There are some products on sale',
+                ])
+
+                bot.set_trainer(ChatterBotCorpusTrainer)
+
+                print("There are some products on sale")
+                getProductsOnSale()
+
+            elif(var==2):
+                print()
+
+            elif(var==3):
+                print()
+
     except (KeyboardInterrupt, EOFError, SystemExit):
         break
+
